@@ -1,4 +1,4 @@
-# Image Detection Plugin (Android & iOS)
+# Image Detection Plugin (Android Full & iOS in progress) "FORK"
 This plugin allows the application to detect if an inputed image target is visible, or not, by matching the image features with the device camera features using [OpenCV](http://opencv.org/) (v3.1. on Android, v2.4.13 on iOS)  It also presents the device camera preview in the background.
 
 ## Changes
@@ -10,9 +10,7 @@ The plugin is aimed to work in **portrait mode**, should also work in landscape 
 ## Install
 To install the plugin in your current Cordova project run outside you project root
 ```
-git clone https://github.com/Cloudoki/ImageDetectionCordovaPlugin.git
-cd <your-project-root>
-cordova plugin add ../ImageDetectionCordovaPlugin
+cordova plugin add cordova-plugin-image-detection
 ```
 
 ### Android
