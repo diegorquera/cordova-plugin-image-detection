@@ -85,7 +85,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     private Date                 last_time;
     private boolean processFrames = true, thread_over = true, debug = false,
             called_success_detection = false, called_failed_detection = true,
-            previewing = false, save_files = false;
+            previewing = false, save_files = true;
     private List<Integer> detection = new ArrayList<>();
 
     private List<Mat> triggers = new ArrayList<>();
@@ -261,6 +261,23 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             }
             return true;
         }
+        if(action.equals("switchCamera")) {
+            Log.i(TAG, "switchCamera called");
+            int type = data.getInt(0);
+            camera = null;
+            if (type == CAMERA_ID_BACK) {
+                setCameraIndex(CAMERA_ID_BACK);
+            } else if (type == CAMERA_ID_FRONT) {
+                setCameraIndex(CAMERA_ID_FRONT);
+            } else {
+                setCameraIndex(CAMERA_ID_ANY);
+            }
+            openCamera();
+        }
+        if(action.equals("screenshot")) {
+            Log.i(TAG, "screenshot called");
+            save_files = true;
+        }
         return false;
     }
 
@@ -289,6 +306,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                         REQUEST_EXTERNAL_STORAGE
                 );
             }
+            save_files = false;
         }
 
         thread_over = true;
@@ -641,6 +659,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                         String extStorageDirectory = Environment.getExternalStorageDirectory().toString();
                         Imgcodecs.imwrite(extStorageDirectory + "/pic" + count + ".png", gray);
                         Log.i("### FILE ###", "File saved to " + extStorageDirectory + "/pic" + count + ".png");
+                        save_files = false; // Remove save for memory full!
                     }
                     count++;
                 }

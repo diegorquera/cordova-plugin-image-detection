@@ -21,6 +21,15 @@ ImageDetectionPlugin.prototype.isDetecting = function (successCallback, errorCal
 ImageDetectionPlugin.prototype.setDetectionTimeout = function (timeout, successCallback, errorCallback) {
   cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "setDetectionTimeout", [timeout]);
 };
+ImageDetectionPlugin.prototype.frontCamera = function (successCallback, errorCallback) {
+  cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "switchCamera", [98]);
+};
+ImageDetectionPlugin.prototype.backCamera = function (successCallback, errorCallback) {
+  cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "switchCamera", [99]);
+};
+ImageDetectionPlugin.prototype.screenshot = function (successCallback, errorCallback) {
+  cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "screenshot", []);
+};
 ImageDetectionPlugin.prototype.greet = function (name, successCallback, errorCallback) {
   cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "greet", [name]);
 };
