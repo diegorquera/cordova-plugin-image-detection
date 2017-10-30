@@ -63,6 +63,8 @@ import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
 
+import java.io.*;
+
 public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder.Callback {
 
     private static final String  TAG = "OpenCV::Activity";
@@ -96,9 +98,14 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     private double timeout = 0.0;
     private int cameraId = -1;
     private int mCameraIndex = CAMERA_ID_ANY;
+    private SurfaceHolder cHolder;
+    private int cFormat;
+    private int cWidth = 0;
+    private int cHeight = 0;
 
     private BaseLoaderCallback mLoaderCallback;
     private FrameLayout cameraFrameLayout;
+    public CallbackContext mCallbackContext;
 
     private  int count = 0;
     private String[] PERMISSIONS_STORAGE = {
@@ -174,9 +181,8 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     }
 
     @Override
-    public boolean execute(String action, JSONArray data,
-                           CallbackContext callbackContext) throws JSONException {
-
+    public boolean execute(String action, JSONArray data, CallbackContext callbackContext) throws JSONException {
+        mCallbackContext = callbackContext;
         if (action.equals("greet")) {
             Log.i(TAG, "greet called");
             String name = data.getString(0);
@@ -261,22 +267,58 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             }
             return true;
         }
+        int h = cHeight;
         if(action.equals("switchCamera")) {
             Log.i(TAG, "switchCamera called");
+            String message;
             int type = data.getInt(0);
-            camera = null;
+            surfaceDestroyed(cHolder);
+
             if (type == CAMERA_ID_BACK) {
+                message = "\nPCamera Back";
                 setCameraIndex(CAMERA_ID_BACK);
             } else if (type == CAMERA_ID_FRONT) {
+                message = "\nPCamera Front";
                 setCameraIndex(CAMERA_ID_FRONT);
+                h -= 10;
             } else {
+                message = "\nPCamera Any";
                 setCameraIndex(CAMERA_ID_ANY);
             }
             openCamera();
+            surfaceChanged(cHolder, cFormat, h, cWidth);
+            callbackContext.success(message);
+            return true;
         }
         if(action.equals("screenshot")) {
             Log.i(TAG, "screenshot called");
-            save_files = true;
+            cordova.getThreadPool().execute(new Runnable() {
+                public void run() {
+                    camera.takePicture(shutterCallback, null, pictureCallback);
+                }
+
+                private Camera.PictureCallback pictureCallback = new Camera.PictureCallback() {
+                    public void onPictureTaken(byte[] data, Camera camera) {
+                        try {
+                            byte[] output = Base64.encode(data, Base64.NO_WRAP);
+                            String js_out = new String(output);
+                            mCallbackContext.success(js_out);
+                        } catch(Exception e) {
+                            mCallbackContext.error("No value or invalid data");
+                        }
+                    }
+                };
+
+                private Camera.ShutterCallback shutterCallback = new Camera.ShutterCallback(){
+                    public void onShutter(){
+                      // do nothing, availabilty of this callback causes default system shutter sound to work
+                    }
+                };
+            });
+            PluginResult r = new PluginResult(PluginResult.Status.NO_RESULT);
+            r.setKeepCallback(true);
+            callbackContext.sendPluginResult(r);
+            return true;
         }
         return false;
     }
@@ -306,7 +348,6 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                         REQUEST_EXTERNAL_STORAGE
                 );
             }
-            save_files = false;
         }
 
         thread_over = true;
@@ -378,6 +419,13 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int height, int width) {
+        if (cHolder == null) {
+            cHolder = holder;
+            cFormat = format;
+            cHeight = height;
+            cWidth = width;
+        }
+
         if(previewing){
             camera.stopPreview();
             previewing = false;
