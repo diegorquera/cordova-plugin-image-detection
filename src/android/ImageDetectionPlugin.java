@@ -7,9 +7,11 @@ import android.content.DialogInterface;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
+import android.graphics.Matrix;
 import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.PixelFormat;
+import android.hardware.Camera;
 import android.hardware.Camera;
 import android.os.Build;
 import android.os.Environment;
@@ -25,6 +27,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.widget.FrameLayout;
+import android.support.media.ExifInterface;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaInterface;
@@ -87,7 +90,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     private Date                 last_time;
     private boolean processFrames = true, thread_over = true, debug = false,
             called_success_detection = false, called_failed_detection = true,
-            previewing = false, save_files = true;
+            previewing = false, save_files = false;
     private List<Integer> detection = new ArrayList<>();
 
     private List<Mat> triggers = new ArrayList<>();
@@ -98,20 +101,23 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     private double timeout = 0.0;
     private int cameraId = -1;
     private int mCameraIndex = CAMERA_ID_ANY;
-    private SurfaceHolder cHolder;
-    private int cFormat;
-    private int cWidth = 0;
-    private int cHeight = 0;
+    private SurfaceHolder mHolder;
+    private int mFormat;
+    private int mWidth = 0;
+    private int mHeight = 0;
 
     private BaseLoaderCallback mLoaderCallback;
     private FrameLayout cameraFrameLayout;
-    public CallbackContext mCallbackContext;
+    private CallbackContext mCallbackContext;
+    private boolean isInitalize = false;
+
 
     private  int count = 0;
     private String[] PERMISSIONS_STORAGE = {
             Manifest.permission.READ_EXTERNAL_STORAGE,
             Manifest.permission.WRITE_EXTERNAL_STORAGE
     };
+
 
     @SuppressWarnings("deprecation")
     private static class JavaCameraSizeAccessor implements CameraBridgeViewBase.ListItemAccessor {
@@ -131,9 +137,10 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
     @Override
     public void initialize(CordovaInterface cordova, CordovaWebView webView) {
+        super.initialize(cordova, webView);
         activity = cordova.getActivity();
 
-        super.initialize(cordova, webView);
+        Log.i(TAG, "initialize(): init plugin");
 
         mLoaderCallback = new BaseLoaderCallback(activity) {
             @Override
@@ -150,7 +157,9 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                 }
             }
         };
+    }
 
+    public void ready() {
         activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN);
         activity.getWindow().setFormat(PixelFormat.TRANSLUCENT);
         activity.getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
@@ -182,6 +191,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
     @Override
     public boolean execute(String action, JSONArray data, CallbackContext callbackContext) throws JSONException {
+        Log.i(TAG, "execute(): action '" + action + "'");
         mCallbackContext = callbackContext;
         if (action.equals("greet")) {
             Log.i(TAG, "greet called");
@@ -192,6 +202,18 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             } else {
                 callbackContext.error("");
             }
+            return true;
+        }
+        if (action.equals("initialize")) {
+            activity.runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    isInitalize = true;
+                    ready();
+                    onStart();
+                }
+            });
+            callbackContext.success("run plugin");
             return true;
         }
         if (action.equals("isDetecting")) {
@@ -267,12 +289,11 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             }
             return true;
         }
-        int h = cHeight;
         if(action.equals("switchCamera")) {
             Log.i(TAG, "switchCamera called");
             String message;
             int type = data.getInt(0);
-            surfaceDestroyed(cHolder);
+            surfaceDestroyed(mHolder);
 
             if (type == CAMERA_ID_BACK) {
                 message = "\nPCamera Back";
@@ -280,13 +301,12 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             } else if (type == CAMERA_ID_FRONT) {
                 message = "\nPCamera Front";
                 setCameraIndex(CAMERA_ID_FRONT);
-                h -= 10;
             } else {
                 message = "\nPCamera Any";
                 setCameraIndex(CAMERA_ID_ANY);
             }
             openCamera();
-            surfaceChanged(cHolder, cFormat, h, cWidth);
+            surfaceChanged(mHolder, mFormat, mHeight, mWidth);
             callbackContext.success(message);
             return true;
         }
@@ -300,9 +320,45 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                 private Camera.PictureCallback pictureCallback = new Camera.PictureCallback() {
                     public void onPictureTaken(byte[] data, Camera camera) {
                         try {
-                            byte[] output = Base64.encode(data, Base64.NO_WRAP);
-                            String js_out = new String(output);
-                            mCallbackContext.success(js_out);
+                            camera.stopPreview();
+                            previewing = false;
+
+                            Camera.CameraInfo info = new Camera.CameraInfo();
+                            Camera.getCameraInfo(cameraId, info);
+
+                            Matrix matrix = new Matrix();
+
+                            ExifInterface exifInterface = new ExifInterface(new ByteArrayInputStream(data));
+                            int rotation = exifInterface.getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+                            int rotationInDegrees = 0;
+                            if (rotation == ExifInterface.ORIENTATION_ROTATE_90) { rotationInDegrees = 90; }
+                            else if (rotation == ExifInterface.ORIENTATION_ROTATE_180) {  rotationInDegrees = 180; }
+                            else if (rotation == ExifInterface.ORIENTATION_ROTATE_270) {  rotationInDegrees = 270; }
+
+                            if (rotation != 0f) {
+                                matrix.preRotate(rotationInDegrees);
+                            }
+
+                            Bitmap bitmap = BitmapFactory.decodeByteArray(data, 0, data.length);
+                            if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+                                matrix.preScale(1.0f, -1.0f);
+                            } else {
+                                float scale = 0.5f;
+                                if (bitmap.getWidth() > bitmap.getHeight()) {
+                                    scale = (float) 2048 / (float) bitmap.getWidth();
+                                } else {
+                                    scale = (float) 2048 / (float) bitmap.getHeight();
+                                }
+                                matrix.preScale(scale, scale);
+                            }
+                            bitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
+
+                            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+                            bitmap.compress(Bitmap.CompressFormat.JPEG, 85, outputStream);
+                            data = outputStream.toByteArray();
+
+                            String encodedImage = Base64.encodeToString(data, Base64.NO_WRAP);
+                            mCallbackContext.success(encodedImage);
                         } catch(Exception e) {
                             mCallbackContext.error("No value or invalid data");
                         }
@@ -320,13 +376,22 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             callbackContext.sendPluginResult(r);
             return true;
         }
+        if(action.equals("activeCamera")) {
+            Log.i(TAG, "activeCamera called");
+            camera.startPreview();
+            previewing = true;
+            callbackContext.success("Active camera");
+            return true;
+        }
         return false;
     }
 
     @Override
-    public void onStart()
-    {
+    public void onStart() {
         super.onStart();
+        if (!isInitalize) {
+            return;
+        }
 
         Log.i(TAG, "onStart(): Activity starting");
 
@@ -369,6 +434,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
     public static void sendViewToBack(final View child) {
         final ViewGroup parent = (ViewGroup)child.getParent();
         if (null != parent) {
+            Log.i(TAG, "sendViewToBack(): to back");
             parent.removeView(child);
             parent.addView(child, 0);
         }
@@ -393,7 +459,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
             Log.d(TAG, "OpenCV library found inside package. Using it!");
             mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
         }
-        if (camera == null) {
+        if (camera == null && isInitalize) {
             openCamera();
         }
     }
@@ -410,6 +476,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
     @Override
     public void surfaceCreated(SurfaceHolder holder) {
+        Log.i(TAG, "surfaceCreated(): create");
         matches = new MatOfDMatch();
         orbDetector = FeatureDetector.create(FeatureDetector.ORB);
         orbDescriptor = DescriptorExtractor.create(DescriptorExtractor.ORB);
@@ -419,12 +486,17 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
     @Override
     public void surfaceChanged(SurfaceHolder holder, int format, int height, int width) {
-        if (cHolder == null) {
-            cHolder = holder;
-            cFormat = format;
-            cHeight = height;
-            cWidth = width;
+        if (mHolder == null) {
+            mHolder = holder;
+            mFormat = format;
+            mHeight = height;
+            mWidth = width;
         }
+        if (!isInitalize) {
+            return;
+        }
+
+        Log.i(TAG, "surfaceChanged(): changed");
 
         if(previewing){
             camera.stopPreview();
@@ -452,6 +524,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
+        Log.i(TAG, "surfaceDestroyed(): destroy");
         if (camera != null) {
             camera.setPreviewCallback(null);
             camera.stopPreview();
@@ -724,7 +797,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                     LinkedList<DMatch> good_matches = new LinkedList<>();
                     MatOfDMatch gm = new MatOfDMatch();
 
-                    double minDistance = 1000;
+                    double minDistance = 2000;
 
                     int rowCount;
 
@@ -942,9 +1015,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                 if(result < detection_limit) {
                     detection.set(_index, result);
                 }
-            } catch (IndexOutOfBoundsException ibe){
-//                 detection.add(_index, 1);
-            }
+            } catch (IndexOutOfBoundsException ibe){}
         } else {
             for (int i = 0; i < triggers.size(); i++) {
                 try {
@@ -954,9 +1025,7 @@ public class ImageDetectionPlugin extends CordovaPlugin implements SurfaceHolder
                     } else {
                         detection.set(_index, result);
                     }
-                } catch (IndexOutOfBoundsException ibe){
-//                    detection.add(i, 0);
-                }
+                } catch (IndexOutOfBoundsException ibe){}
             }
         }
 

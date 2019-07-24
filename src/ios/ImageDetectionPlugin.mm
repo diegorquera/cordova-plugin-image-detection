@@ -22,7 +22,23 @@ using namespace cv;
 
 @implementation ImageDetectionPlugin
 
-@synthesize camera, img;
+@synthesize camera, img, screenshot_callbackId, must_take_screenshot, taken_screenshot;
+
+
+
+
+- (void)initialize:(CDVInvokedUrlCommand*)command
+{
+    NSLog(@"----------- initialize() ----------");
+    [self pluginInitialize];
+    [self.commandDelegate runInBackground:^{
+        CDVPluginResult* plugin_result = nil;
+        NSString* msg = [NSString stringWithFormat: @"Initialize()"];
+        plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
+        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
+    }];
+}
+
 
 - (void)greet:(CDVInvokedUrlCommand*)command
 {
@@ -48,6 +64,7 @@ using namespace cv;
 
 - (void)setPatterns:(CDVInvokedUrlCommand*)command;
 {
+    NSLog(@"----------- setPatterns() ----------");
     [self.commandDelegate runInBackground:^{
         CDVPluginResult* plugin_result = nil;
         NSMutableString* msg = [NSMutableString stringWithString:@""];
@@ -88,6 +105,7 @@ using namespace cv;
 
 - (void)startProcessing:(CDVInvokedUrlCommand*)command;
 {
+    NSLog(@"----------- startProcessing() ----------");
     [self.commandDelegate runInBackground:^{
         CDVPluginResult* plugin_result = nil;
         NSNumber* argVal = [command.arguments objectAtIndex:0];
@@ -128,7 +146,7 @@ using namespace cv;
 
         if (argVal != nil && argVal > (void *) 0) {
             timeout = [argVal floatValue];
-            ease_time = 0.5;
+            ease_time = 0.1;
             timeout_started = [NSDate date];
             msg = [NSString stringWithFormat:@"Processing timeout set to %@", argVal];
             plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
@@ -140,6 +158,122 @@ using namespace cv;
         [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
     }];
 }
+
+
+- (void)activeCamera:(CDVInvokedUrlCommand*)command;
+{
+	NSLog(@"----------- activeCamera() ----------");
+    [self.camera start];
+    [self.commandDelegate runInBackground:^{
+        CDVPluginResult* plugin_result = nil;
+        plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"activeCamera"];
+        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
+    }];
+}
+
+
+- (void)resumeCamera:(CDVInvokedUrlCommand*)command;
+{
+	NSLog(@"----------- resumeCamera() ----------");
+	[self.camera stop];
+    [self.camera start];
+    [self.commandDelegate runInBackground:^{
+        CDVPluginResult* plugin_result = nil;
+        plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"resumeCamera"];
+        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
+    }];
+}
+
+
+- (void)switchCamera:(CDVInvokedUrlCommand*)command;
+{
+	NSLog(@"----------- switchCamera() ----------");
+    [self.commandDelegate runInBackground:^{
+        CDVPluginResult* plugin_result = nil;
+		[self.camera switchCameras];
+
+        plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:@"switchCamera"];
+        [self.commandDelegate sendPluginResult:plugin_result callbackId:command.callbackId];
+    }];
+}
+
+- (void)screenshot:(CDVInvokedUrlCommand*)command;
+{
+	NSLog(@"----------- screenshot() ----------");
+    must_take_screenshot = YES;
+    screenshot_callbackId = command.callbackId;
+}
+
+
+-(void)takeScreenshotInternal
+{
+    [self.commandDelegate runInBackground:^{
+        // Change the color scheme for iOS
+        cv::Mat rgb_image;
+        cv::Mat bgr_image = taken_screenshot;
+        cv::cvtColor(bgr_image, rgb_image, CV_RGB2BGR);
+        UIImage *img = MatToUIImage(rgb_image);
+        //UIImageWriteToSavedPhotosAlbum(img , nil, nil, nil);
+
+        // Convert the image into dataURL
+        NSString *base64Image = [self getBase64Image:img withQuality:0.85];
+        taken_screenshot.release();
+
+        // Return the screenshot from the plugin
+        CDVPluginResult *pluginResult = nil;
+
+        if (base64Image && ![base64Image isEqualToString:@""])
+        {
+            NSMutableArray *params = [[NSMutableArray alloc] init];
+            [params addObject:base64Image];
+            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsArray:params];
+        }
+        else
+        {
+             pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:@"Could not take screenshot"];
+        }
+        [pluginResult setKeepCallbackAsBool:true];
+        [self.commandDelegate sendPluginResult:pluginResult callbackId:screenshot_callbackId];
+    }];
+}
+
+
+- (double)radiansFromUIImageOrientation:(UIImageOrientation)orientation {
+    double radians;
+
+    switch ([[UIApplication sharedApplication] statusBarOrientation]) {
+        case UIDeviceOrientationPortrait:
+            radians = M_PI_2;
+            break;
+        case UIDeviceOrientationLandscapeLeft:
+            radians = 0.f;
+            break;
+        case UIDeviceOrientationLandscapeRight:
+            radians = M_PI;
+            break;
+        case UIDeviceOrientationPortraitUpsideDown:
+            radians = -M_PI_2;
+            break;
+    }
+}
+
+
+- (NSString *)getBase64Image:(UIImage*)imageRef withQuality:(CGFloat) quality
+{
+    NSString *base64Image = nil;
+    @try
+    {
+        NSData *imageData = UIImageJPEGRepresentation(imageRef, quality);
+        base64Image = [imageData base64EncodedStringWithOptions:0];
+    }
+    @catch (NSException *exception)
+    {
+        NSLog(@"error while get base64Image: %@", [exception reason]);
+    }
+    return base64Image;
+}
+
+
 
 -(void)setBase64Pattern:(NSArray *)patterns
 {
@@ -225,7 +359,7 @@ using namespace cv;
 
     self.camera.delegate = self;
 
-    processFrames = true;
+    processFrames = false;
     debug = false;
     save_files = false;
     thread_over = true;
@@ -274,7 +408,7 @@ using namespace cv;
         if (passed_ease > ease_time) {
             // process each image in new thread
             if(!image.empty() && thread_over){
-                for (int i = 0; i < triggers.size(); i++) {
+                for (int32_t i = 0; i < (int32_t)triggers.size(); i++) {
                     Mat patt = triggers.at(i);
                     std::vector<KeyPoint> kp1 = triggers_kps.at(i);
                     Mat desc1 = triggers_descs.at(i);
@@ -297,11 +431,17 @@ using namespace cv;
         last_time = current_time;
         timeout = 0.0;
     }
+    if (must_take_screenshot)
+    {
+        taken_screenshot = image.clone();
+        must_take_screenshot = NO;
+        [self takeScreenshotInternal];
+    }
 }
 #endif
 
 #ifdef __cplusplus
-- (void)backgroundImageProcessing:(const Mat &)image pattern:(const Mat &)patt keypoints:(const std::vector<KeyPoint> &)kp1 descriptor:(const Mat &)desc1 index:(const int &)idx
+- (void)backgroundImageProcessing:(const Mat &)image pattern:(const Mat &)patt keypoints:(const std::vector<KeyPoint> &)kp1 descriptor:(const Mat &)desc1 index:(int32_t)idx
 {
     if(!image.empty() && !patt.empty())
     {
@@ -326,7 +466,7 @@ using namespace cv;
             bf.match(desc1, desc2, matches);
 
             int size = 0;
-            double min_dist = 1000;
+            double min_dist = 2000;
             if(desc1.rows < matches.size())
                 size = desc1.rows;
             else
@@ -428,8 +568,8 @@ using namespace cv;
 
                 if(result)
                 {
-                    NSLog(@"detecting for index - %d", (int)idx);
-                    [self updateState: true index:(int)idx];
+                    NSLog(@"detecting for index - %d", idx);
+                    [self updateState: true index:idx];
                     if(save_files)
                     {
                         UIImageWriteToSavedPhotosAlbum([ImageUtils UIImageFromCVMat:gray], nil, nil, nil);
@@ -453,7 +593,7 @@ using namespace cv;
                         //image_copy = img_matches;
                     }
                 } else {
-                    [self updateState: false index:(int)idx];
+                    [self updateState: false index:idx];
                 }
                 H.release();
                 img_matches.release();
@@ -470,7 +610,7 @@ using namespace cv;
 }
 #endif
 
--(void)updateState:(BOOL) state index:(const int &)idx
+-(void)updateState:(BOOL) state index:(int32_t)idx
 {
     int detection_limit = 6;
 //
@@ -479,17 +619,17 @@ using namespace cv;
 //        [detection removeObjectAtIndex:0];
 //    }
 
-    NSLog(@"updating state for index - %d", (int)idx);
+    NSLog(@"updating state for index - %d", idx);
 
     if(state)
     {
-        int result = [[detection objectAtIndex:(int)idx] intValue] + 1;
+        int result = [[detection objectAtIndex:idx] intValue] + 1;
         if(result < detection_limit) {
             [detection replaceObjectAtIndex:idx withObject:[NSNumber numberWithInt:result]];
         }
     } else {
         for (int i = 0; i < triggers.size(); i++) {
-            int result = [[detection objectAtIndex:(int)i] intValue] - 1;
+            int result = [[detection objectAtIndex:i] intValue] - 1;
             if(result < 0) {
                 result = 0;
             }
@@ -497,10 +637,11 @@ using namespace cv;
         }
     }
 
-    if([self getState:(int)idx] && called_failed_detection && !called_success_detection) {
+    if([self getState:idx] && called_failed_detection && !called_success_detection) {
         [self.commandDelegate runInBackground:^{
             CDVPluginResult* plugin_result = nil;
-            NSString* msg = [NSString stringWithFormat:@"{\"message\":\"pattern detected\", \"index\":%d}", (int)idx];
+            NSString* msg = [NSString stringWithFormat:@"{\"message\":\"pattern detected\", \"index\":%d}", idx];
+            NSLog(msg);
             plugin_result = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:msg];
             [plugin_result setKeepCallbackAsBool:YES];
 
@@ -508,12 +649,12 @@ using namespace cv;
         }];
         called_success_detection = true;
         called_failed_detection = false;
-        detected_index = (int)idx;
+        detected_index = idx;
     }
 
-    bool valid_index = detected_index == (int)idx;
+    bool valid_index = detected_index == idx;
 
-    if(![self getState:(int)idx] && !called_failed_detection && called_success_detection && valid_index) {
+    if(![self getState:idx] && !called_failed_detection && called_success_detection && valid_index) {
         [self.commandDelegate runInBackground:^{
             CDVPluginResult* plugin_result = nil;
             NSString* msg = @"{\"message\":\"pattern not detected\"}";
@@ -527,7 +668,7 @@ using namespace cv;
     }
 }
 
--(BOOL)getState: (const int &) index
+-(BOOL)getState: (int32_t) index
 {
     int detection_thresh = 3;
     NSNumber *total = 0;

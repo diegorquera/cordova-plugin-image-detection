@@ -15,6 +15,9 @@ ImageDetectionPlugin.prototype.setPatterns = function (patterns, successCallback
  }
  cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "setPatterns", _patterns);
 };
+ImageDetectionPlugin.prototype.initialize = function (successCallback, errorCallback) {
+  cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "initialize", []);
+};
 ImageDetectionPlugin.prototype.isDetecting = function (successCallback, errorCallback) {
   cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "isDetecting", []);
 };
@@ -29,6 +32,12 @@ ImageDetectionPlugin.prototype.backCamera = function (successCallback, errorCall
 };
 ImageDetectionPlugin.prototype.screenshot = function (successCallback, errorCallback) {
   cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "screenshot", []);
+};
+ImageDetectionPlugin.prototype.activeCamera = function (successCallback, errorCallback) {
+  cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "activeCamera", []);
+};
+ImageDetectionPlugin.prototype.resumeCamera = function (successCallback, errorCallback) {
+  cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "resumeCamera", []);
 };
 ImageDetectionPlugin.prototype.greet = function (name, successCallback, errorCallback) {
   cordova.exec(successCallback, errorCallback, "ImageDetectionPlugin", "greet", [name]);
