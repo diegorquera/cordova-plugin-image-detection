@@ -1,4 +1,4 @@
-# Image Detection Plugin (Android & iOS) "FORK of https://github.com/Cloudoki/ImageDetectionCordovaPlugin"
+# Image Detection Plugin (Android & iOS) "FORK of https://github.com/diegorquera/ImageDetectionCordovaPlugin"
 This plugin allows the application to detect if an inputed image target is visible, or not, by matching the image features with the device camera features using [OpenCV](http://opencv.org/) (v3.1. on Android, v2.4.13 on iOS)  It also presents the device camera preview in the background.
 
 ## Changes

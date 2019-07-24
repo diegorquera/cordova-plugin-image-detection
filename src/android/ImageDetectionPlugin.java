@@ -1,4 +1,4 @@
-package com.cloudoki.imagedetectionplugin;
+package com.diegorquera.imagedetectionplugin;
 
 import android.Manifest;
 import android.app.Activity;

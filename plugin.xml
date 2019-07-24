@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <plugin xmlns="http://apache.org/cordova/ns/plugins/1.0"
     xmlns:android="http://schemas.android.com/apk/res/android"
-    id="com.cloudoki.imagedetectionplugin"
+    id="cordova-plugin-image-detection"
     version="1.0.0">
     <name>Image Detection Plugin</name>
 
@@ -29,7 +29,7 @@
     <platform name="android">
       <config-file target="res/xml/config.xml" parent="/*">
          <feature name="ImageDetectionPlugin">
-           <param name="android-package" value="com.cloudoki.imagedetectionplugin.ImageDetectionPlugin"/>
+           <param name="android-package" value="com.diegorquera.imagedetectionplugin.ImageDetectionPlugin"/>
            <param name="onload" value="true" />
          </feature>
       </config-file>
@@ -56,7 +56,7 @@
       <framework src="com.android.support:appcompat-v7:+" />
       <source-file src="src/android/libs/build-extras.gradle" target-dir="." />
       <source-file src="src/android/libs/opencv-release.aar" target-dir="libs/" />
-      <source-file src="src/android/ImageDetectionPlugin.java" target-dir="src/com/cloudoki/imagedetectionplugin/" />
+      <source-file src="src/android/ImageDetectionPlugin.java" target-dir="src/com/diegorquera/imagedetectionplugin/" />
     </platform>
 
     <!-- iOS -->

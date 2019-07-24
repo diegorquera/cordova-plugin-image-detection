@@ -3,7 +3,7 @@
   "version": "1.5.0",
   "description": "The ImageDetectionPlugin for Cordova enables the use of OpenCV SDK to detect an inputed image.",
   "cordova": {
-    "id": "com.cloudoki.imagedetectionplugin",
+    "id": "cordova-plugin-image-detection",
     "platforms": [
       "android",
       "ios",
